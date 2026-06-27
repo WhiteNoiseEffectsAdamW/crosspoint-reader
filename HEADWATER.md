@@ -49,6 +49,11 @@ It is **skippable** (Back button, including mid-download) and bounded by a conne
 **New**
 - [src/activities/network/OpdsSyncActivity.h](src/activities/network/OpdsSyncActivity.h) /
   [.cpp](src/activities/network/OpdsSyncActivity.cpp) — the headless sync flow.
+- [src/activities/headwater/HeadwaterPaths.h](src/activities/headwater/HeadwaterPaths.h) — single source of truth for
+  the `/Headwater` issues folder, shared by the sync (writer) and the app (reader).
+- [src/activities/headwater/HeadwaterAppActivity.h](src/activities/headwater/HeadwaterAppActivity.h) /
+  [.cpp](src/activities/headwater/HeadwaterAppActivity.cpp) — the Headwater app shell: an offline, newest-first list of
+  downloaded issues that opens the selected issue in the reader. The frame the channels view layers onto.
 
 **Modified**
 - [src/OpdsServerStore.h](src/OpdsServerStore.h) / [.cpp](src/OpdsServerStore.cpp) — `getHeadwaterServer()` (URL
@@ -57,7 +62,8 @@ It is **skippable** (Back button, including mid-download) and bounded by a conne
   `downloadToFileAtomic()` (`.part` → rename).
 - [src/activities/home/HomeActivity.h](src/activities/home/HomeActivity.h) /
   [.cpp](src/activities/home/HomeActivity.cpp) and [src/activities/ActivityManager.h](src/activities/ActivityManager.h) —
-  `HomeMenuItem::HEADWATER_SYNC`: menu entry, boot pre-selection, dispatch.
+  `HomeMenuItem::HEADWATER_SYNC` and `HEADWATER_APP`: two Headwater menu entries (sync pre-selected at boot, app below),
+  dispatch.
 - [lib/I18n/translations/english.yaml](lib/I18n/translations/english.yaml) — `STR_HEADWATER_*` strings.
 
 ## Build
@@ -74,10 +80,14 @@ official upstream releases, so this fork must be built from source.)
 Add your personal Headwater feed URL (with token) as an OPDS server via the web settings UI or on-device OPDS settings.
 The sync auto-detects it by the `headwaterapp.com` host.
 
-## v-next: Headwater app (cross-day channel browsing)
+## Headwater app (cross-day channel browsing)
 
 A dedicated Headwater browsing experience layered on the v1 sync. Design (locked in dialogue):
 
+- **App shell — SHIPPED.** A second Home entry "Headwater" (below "Check Headwater") opens `HeadwaterAppActivity`: a
+  flat, newest-first list of the issues in `/Headwater`, opening the selected issue in the existing reader. This is the
+  frame the manifest-driven views below layer onto. Everything below this point is still **gated on the backend
+  manifest** — see [HEADWATER_BACKEND.md](HEADWATER_BACKEND.md).
 - **Stored unit = the daily digest EPUB** (plus user "custom export" EPUBs). Each summary is authored once and
   lives in exactly one artifact — "channel" is a *view*, never a re-stored per-channel copy. No duplicate bytes.
 - **Backend dependency — per-issue manifest.** Each synced issue ships a small sidecar manifest: per summary
@@ -99,10 +109,11 @@ Sequence: build only after v1's on-device sync is verified and the backend manif
 
 ## Open items
 
-- [x] First clean compile (`pio run -e default`) — **passes** (RAM 30.9%, Flash 79.8%).
-- [ ] On-device verification: happy path, idempotency (re-run = no duplicate), skip mid-download, no-Wi-Fi error.
+- [x] First clean compile (`pio run -e default`) — **passes** (RAM 30.9%, Flash 79.9%).
+- [x] On-device verification — happy path **verified**, idempotency (re-run = no duplicate) **verified**. Still to confirm: skip mid-download, no-Wi-Fi error.
+- [x] Headwater app shell — second Home entry + offline issues list opening in the reader. Compiles; on-device check pending.
 - [ ] Confirm the backend gives each daily issue a unique title (see idempotency note above).
+- [ ] Backend handoff (see [HEADWATER_BACKEND.md](HEADWATER_BACKEND.md)): unique titles, per-summary TOC entries, per-issue manifest — gates the channels view.
+- [ ] Headwater app — cross-issue index (from manifest) + channels view (Option A) + read-state + Today/Digests/Saved sectioning + retention.
 - [ ] v2: X3 automatic on-wake sync.
 - [ ] Optional: QR pairing to replace cumbersome on-device token entry.
-- [ ] Backend: per-issue manifest (`channel / videoTitle / anchor / date / new`) — gates the cross-day Headwater app.
-- [ ] v-next: Headwater app — home (issues across days) + channels view (index-driven, Option A) + read-state + retention.

@@ -17,6 +17,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "activities/headwater/HeadwaterAppActivity.h"
 #include "activities/network/OpdsSyncActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
@@ -31,7 +32,7 @@ int HomeActivity::getMenuItemCount() const {
     count++;
   }
   if (hasHeadwater) {
-    count++;
+    count += 2;  // "Check Headwater" (sync) + "Headwater" (app)
   }
   return count;
 }
@@ -201,6 +202,9 @@ void HomeActivity::loop() {
         case HomeMenuItem::HEADWATER_SYNC:
           onHeadwaterSyncOpen();
           break;
+        case HomeMenuItem::HEADWATER_APP:
+          onHeadwaterAppOpen();
+          break;
         case HomeMenuItem::FILE_BROWSER:
           onFileBrowserOpen();
           break;
@@ -257,7 +261,10 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   if (hasHeadwater) {
-    // First menu entry (matches indexToMenuItem) so it's the pre-selected boot target.
+    // Order matches indexToMenuItem: sync first (pre-selected boot target), then
+    // the app. Insert the app at the front first, then the sync ahead of it.
+    menuItems.insert(menuItems.begin(), tr(STR_HEADWATER));
+    menuIcons.insert(menuIcons.begin(), Book);
     menuItems.insert(menuItems.begin(), tr(STR_HEADWATER_CHECK));
     menuIcons.insert(menuIcons.begin(), Library);
   }
@@ -309,4 +316,8 @@ void HomeActivity::onHeadwaterSyncOpen() {
   if (server) {
     activityManager.replaceActivity(std::make_unique<OpdsSyncActivity>(renderer, mappedInput, *server));
   }
+}
+
+void HomeActivity::onHeadwaterAppOpen() {
+  activityManager.replaceActivity(std::make_unique<HeadwaterAppActivity>(renderer, mappedInput));
 }

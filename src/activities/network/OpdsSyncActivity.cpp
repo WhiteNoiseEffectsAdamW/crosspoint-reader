@@ -9,6 +9,7 @@
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "WifiCredentialStore.h"
+#include "activities/headwater/HeadwaterPaths.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
@@ -25,9 +26,6 @@ constexpr unsigned long CONNECT_TIMEOUT_MS = 20000;
 constexpr unsigned long SYNC_BUDGET_MS = 120000;
 // Guard against a malformed feed advertising an unbounded pagination chain.
 constexpr int MAX_FEED_PAGES = 20;
-// Headwater issues download into their own folder so they don't litter the SD
-// root / file browser, and so the future Headwater app can scope to one place.
-constexpr char HEADWATER_DIR[] = "/Headwater";
 }  // namespace
 
 void OpdsSyncActivity::onEnter() {
@@ -109,7 +107,7 @@ void OpdsSyncActivity::fetchAndQueue() {
     return;
   }
 
-  Storage.mkdir(HEADWATER_DIR);  // ensure the destination folder exists (no-op if present)
+  Storage.mkdir(headwater::ISSUES_DIR);  // ensure the destination folder exists (no-op if present)
 
   // Walk the feed (following pagination) and queue any issue not already on disk.
   std::string url = server.url;
@@ -130,7 +128,7 @@ void OpdsSyncActivity::fetchAndQueue() {
       // Resolve the download URL relative to the page it came from.
       const std::string downloadUrl = UrlUtils::buildUrl(url, entry.href);
       const std::string path =
-          std::string(HEADWATER_DIR) + "/" +
+          std::string(headwater::ISSUES_DIR) + "/" +
           StringUtils::sanitizeFilename((entry.author.empty() ? "" : entry.author + " - ") + entry.title) + ".epub";
       if (Storage.exists(path.c_str())) continue;  // idempotent: we already have this issue
       pending.push_back({downloadUrl, path, entry.title});
