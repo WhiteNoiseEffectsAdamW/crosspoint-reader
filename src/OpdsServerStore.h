@@ -47,6 +47,11 @@ class OpdsServerStore {
 
   const std::vector<OpdsServer>& getServers() const { return servers; }
   const OpdsServer* getServer(size_t index) const;
+
+  // Returns the configured Headwater feed (first server whose URL host contains
+  // "headwaterapp.com"), or nullptr if none is configured. Used by the one-press
+  // Headwater sync to locate the per-user feed (the token is embedded in the URL).
+  const OpdsServer* getHeadwaterServer() const;
   size_t getCount() const { return servers.size(); }
   bool hasServers() const { return !servers.empty(); }
 

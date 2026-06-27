@@ -207,3 +207,53 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;
 }
+
+HttpDownloader::DownloadError HttpDownloader::downloadToFileAtomic(const std::string& url, const std::string& destPath,
+                                                                  ProgressCallback progress, bool* cancelFlag,
+                                                                  const std::string& username,
+                                                                  const std::string& password) {
+  const std::string partPath = destPath + ".part";
+  LOG_DBG("HTTP", "Downloading (atomic): %s -> %s", url.c_str(), partPath.c_str());
+
+  // A leftover .part from a prior aborted run must not be appended to.
+  if (Storage.exists(partPath.c_str())) {
+    Storage.remove(partPath.c_str());
+  }
+  HalFile file;
+  if (!Storage.openFileForWrite("HTTP", partPath.c_str(), file)) {
+    LOG_ERR("HTTP", "Failed to open part file for writing");
+    return FILE_ERROR;
+  }
+
+  Sink sink;
+  sink.progress = std::move(progress);
+  sink.cancelFlag = cancelFlag;
+  sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
+
+  const DownloadError result = runGet(url, username, password, sink);
+  // Close before any rename/remove on the same path; DESTRUCTOR_CLOSES_FILE
+  // would otherwise close only after the rename.
+  file.close();
+
+  if (result != OK) {
+    Storage.remove(partPath.c_str());
+    return result;
+  }
+  if (sink.downloaded == 0) {
+    LOG_ERR("HTTP", "no data received");
+    Storage.remove(partPath.c_str());
+    return HTTP_ERROR;
+  }
+
+  // Publish atomically: only a complete file ever appears at destPath.
+  if (Storage.exists(destPath.c_str())) {
+    Storage.remove(destPath.c_str());
+  }
+  if (!Storage.rename(partPath.c_str(), destPath.c_str())) {
+    LOG_ERR("HTTP", "rename %s -> %s failed", partPath.c_str(), destPath.c_str());
+    Storage.remove(partPath.c_str());
+    return FILE_ERROR;
+  }
+  LOG_DBG("HTTP", "Downloaded %zu bytes -> %s", sink.downloaded, destPath.c_str());
+  return OK;
+}

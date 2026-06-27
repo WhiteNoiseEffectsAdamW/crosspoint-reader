@@ -44,4 +44,14 @@ class HttpDownloader {
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "");
+
+  /**
+   * Download a file atomically: the body is written to destPath + ".part" and
+   * renamed to destPath only after a fully-received download. A truncated,
+   * failed, or aborted transfer never leaves a partial file at the final path
+   * (the .part is removed). Same parameters as downloadToFile.
+   */
+  static DownloadError downloadToFileAtomic(const std::string& url, const std::string& destPath,
+                                            ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
+                                            const std::string& username = "", const std::string& password = "");
 };

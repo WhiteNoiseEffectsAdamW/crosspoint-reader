@@ -108,3 +108,12 @@ const OpdsServer* OpdsServerStore::getServer(size_t index) const {
   }
   return &servers[index];
 }
+
+const OpdsServer* OpdsServerStore::getHeadwaterServer() const {
+  for (const auto& server : servers) {
+    if (server.url.find("headwaterapp.com") != std::string::npos) {
+      return &server;
+    }
+  }
+  return nullptr;
+}

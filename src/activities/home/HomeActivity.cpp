@@ -10,12 +10,14 @@
 #include <Xtc.h>
 
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "activities/network/OpdsSyncActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -26,6 +28,9 @@ int HomeActivity::getMenuItemCount() const {
     count += recentBooks.size();
   }
   if (hasOpdsServers) {
+    count++;
+  }
+  if (hasHeadwater) {
     count++;
   }
   return count;
@@ -112,12 +117,20 @@ void HomeActivity::onEnter() {
   Activity::onEnter();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  hasHeadwater = OPDS_STORE.getHeadwaterServer() != nullptr;
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   loadRecentBooks(metrics.homeRecentBooksCount);
 
   const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  if (initialMenuItem != HomeMenuItem::NONE) {
+    selectorIndex = base + menuItemToIndex(initialMenuItem, hasOpdsServers, hasHeadwater);
+  } else if (hasHeadwater) {
+    // Pre-select the Headwater entry at boot so a new issue is one press away.
+    selectorIndex = base + menuItemToIndex(HomeMenuItem::HEADWATER_SYNC, hasOpdsServers, hasHeadwater);
+  } else {
+    selectorIndex = 0;
+  }
 
   // Trigger first update
   requestUpdate();
@@ -184,7 +197,10 @@ void HomeActivity::loop() {
       onSelectBook(recentBooks[selectorIndex].path);
     } else {
       const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+      switch (indexToMenuItem(menuIndex, hasOpdsServers, hasHeadwater)) {
+        case HomeMenuItem::HEADWATER_SYNC:
+          onHeadwaterSyncOpen();
+          break;
         case HomeMenuItem::FILE_BROWSER:
           onFileBrowserOpen();
           break;
@@ -240,6 +256,12 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 2, Library);
   }
 
+  if (hasHeadwater) {
+    // First menu entry (matches indexToMenuItem) so it's the pre-selected boot target.
+    menuItems.insert(menuItems.begin(), tr(STR_HEADWATER_CHECK));
+    menuIcons.insert(menuIcons.begin(), Library);
+  }
+
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
@@ -281,3 +303,10 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
+
+void HomeActivity::onHeadwaterSyncOpen() {
+  const OpdsServer* server = OPDS_STORE.getHeadwaterServer();
+  if (server) {
+    activityManager.replaceActivity(std::make_unique<OpdsSyncActivity>(renderer, mappedInput, *server));
+  }
+}
