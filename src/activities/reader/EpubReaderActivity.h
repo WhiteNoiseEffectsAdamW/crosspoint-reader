@@ -78,9 +78,14 @@ class EpubReaderActivity final : public Activity {
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
 
+  // When non-empty, the reader jumps to this href on open (overrides saved progress).
+  // Use for deep-links from the Channels view (e.g. "summary-abc123.xhtml").
+  std::string initialHref;
+
  public:
-  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
-      : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)) {}
+  explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
+                              std::string initialHref = {})
+      : Activity("EpubReader", renderer, mappedInput), epub(std::move(epub)), initialHref(std::move(initialHref)) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

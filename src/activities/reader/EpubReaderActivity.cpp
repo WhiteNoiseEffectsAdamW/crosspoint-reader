@@ -198,7 +198,12 @@ void EpubReaderActivity::onEnter() {
 
   loadCachedBookmarks();
 
-  // Trigger first update
+  // Deep-link: jump to a specific anchor, overriding saved progress.
+  if (!initialHref.empty()) {
+    navigateToHref(initialHref);  // sets currentSpineIndex + pendingAnchor + calls requestUpdate
+    return;
+  }
+
   requestUpdate();
 }
 

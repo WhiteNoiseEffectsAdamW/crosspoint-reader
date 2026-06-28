@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <string_view>
 
+#include "HeadwaterChannelsActivity.h"
 #include "HeadwaterPaths.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -78,13 +79,16 @@ void HeadwaterAppActivity::onSelectSync() {
   }
 }
 
+void HeadwaterAppActivity::onSelectChannels() { activityManager.goToHeadwaterChannels(); }
+
 void HeadwaterAppActivity::onSelectIssue(const std::string& fileName) {
   activityManager.goToReader(std::string(headwater::ISSUES_DIR) + "/" + fileName);
 }
 
 void HeadwaterAppActivity::loop() {
-  // Index 0 is the sync item; real issues occupy indices 1..N.
-  const int totalItems = static_cast<int>(issues.size()) + 1;
+  // Index 0 = Sync now; index 1 = Channels (when issues present); index 2..N = issues.
+  const bool showChannels = hasChannels();
+  const int totalItems = static_cast<int>(issues.size()) + (showChannels ? 2 : 1);
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -94,8 +98,11 @@ void HeadwaterAppActivity::loop() {
     }
     if (selectorIndex == 0) {
       onSelectSync();
+    } else if (showChannels && selectorIndex == 1) {
+      onSelectChannels();
     } else {
-      onSelectIssue(issues[selectorIndex - 1]);
+      const size_t issueIdx = showChannels ? selectorIndex - 2 : selectorIndex - 1;
+      onSelectIssue(issues[issueIdx]);
     }
     return;
   }
@@ -135,12 +142,14 @@ void HeadwaterAppActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
-  // Index 0 = sync item; indices 1..N = downloaded issues.
-  const int totalItems = static_cast<int>(issues.size()) + 1;
+  // Index 0 = Sync now; index 1 = Channels (when issues present); index 2..N = issues.
+  const bool showChannels = hasChannels();
+  const int totalItems = static_cast<int>(issues.size()) + (showChannels ? 2 : 1);
   GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectorIndex,
-               [this](int index) -> std::string {
+               [this, showChannels](int index) -> std::string {
                  if (index == 0) return tr(STR_HEADWATER_SYNC_NOW);
-                 return displayName(issues[index - 1]);
+                 if (showChannels && index == 1) return tr(STR_HEADWATER_CHANNELS);
+                 return displayName(issues[showChannels ? index - 2 : index - 1]);
                });
 
   // Confirm hint mirrors the Home screen ("Select") regardless of row; the row

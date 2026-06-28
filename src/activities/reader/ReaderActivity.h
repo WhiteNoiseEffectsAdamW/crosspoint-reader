@@ -10,6 +10,7 @@ class Txt;
 
 class ReaderActivity final : public Activity {
   std::string initialBookPath;
+  std::string initialAnchor;    // Optional deep-link href (passed to EpubReaderActivity)
   std::string currentBookPath;  // Track current book path for navigation
   static std::unique_ptr<Epub> loadEpub(const std::string& path);
   static std::unique_ptr<Xtc> loadXtc(const std::string& path);
@@ -27,8 +28,10 @@ class ReaderActivity final : public Activity {
   void onGoBack();
 
  public:
-  explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath)
-      : Activity("Reader", renderer, mappedInput), initialBookPath(std::move(initialBookPath)) {}
+  explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,
+                         std::string initialAnchor = {})
+      : Activity("Reader", renderer, mappedInput), initialBookPath(std::move(initialBookPath)),
+        initialAnchor(std::move(initialAnchor)) {}
   void onEnter() override;
   bool isReaderActivity() const override { return true; }
 };

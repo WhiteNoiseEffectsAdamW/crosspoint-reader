@@ -21,7 +21,12 @@ class HeadwaterAppActivity final : public Activity {
 
   void loadIssues();
   void onSelectSync();
+  void onSelectChannels();
   void onSelectIssue(const std::string& fileName);
+
+  // Index 0 = Sync now; index 1 = Channels (when hasChannels); index 2..N = issues.
+  // When there are no issues, there is no Channels item (index 1 would be empty).
+  bool hasChannels() const { return !issues.empty(); }
 
  public:
   explicit HeadwaterAppActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
