@@ -18,7 +18,6 @@ class RenderLock;  // forward declaration
 
 enum class HomeMenuItem {
   NONE,
-  HEADWATER_SYNC,
   HEADWATER_APP,
   FILE_BROWSER,
   RECENTS,
@@ -99,6 +98,7 @@ class ActivityManager {
   void goToBoot();
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
+  void goToHeadwaterApp();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
 
   // This will move current activity to stack instead of deleting it

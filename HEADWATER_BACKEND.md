@@ -19,6 +19,40 @@ Items 2 + 3 together unblock the cross-day Headwater App. Item 1 is independent 
 
 ---
 
+## Hardware-verified notes (2026-06-28)
+
+One-press sync is shipped and **confirmed end-to-end on real X4 hardware**: the device connects
+Wi-Fi, pulls `https://headwaterapp.com/opds/<token>`, downloads new issues into `/Headwater`, and
+returns to an on-device Headwater app that lists them. Auth + feed + download all work. What we
+still need from the feed / EPUB generation, in priority order:
+
+**P0 — Clean, unique filenames (do first).** Idempotency is filename-based; the device skips an
+entry if `sanitizeFilename(author ? author + " - " + title : title) + ".epub"` already exists.
+Verified the current feed yields a **doubled** name: `author="Headwater"` +
+`title="Headwater — June 27, 2026"` → `Headwater - Headwater — June 27, 2026.epub`. Pick
+`author`/`title` together so the stem is one clean, unique, date-stamped string, e.g.
+`Headwater Daily — 2026-06-27.epub` (simplest: `author=""`, `title="Headwater Daily — 2026-06-27"`).
+Feed `<title>` and EPUB `dc:title` move together. Two issues sharing a title → the second is
+silently skipped. *(See §1.)*
+
+**P1a — Stable per-summary anchors.** Verified the current EPUBs use index-based docs
+(`OEBPS/ch001.xhtml`), which move between rebuilds and break deep-linking. Switch to video-id-based
+`summary-<videoId>.xhtml` (OPF id `v-<videoId>`), one TOC entry per summary. Device deep-links by
+spine index + anchor — no reader changes needed. *(See §2.)*
+
+**P1b — Embedded per-issue manifest** at `OEBPS/headwater-manifest.json` (Option A). The device
+builds the cross-day channels index from these; `anchor` must exactly match the EPUB TOC target.
+*(Schema in §3.)*
+
+**P2 — AccountPage token + feed-URL copy button.** Enables zero-typing onboarding (copy URL → paste
+into the reader's web settings). Keep the URL on the `headwaterapp.com` host (device auto-detects by
+that host); no QR-to-scan (device has no camera); warn that regenerating the token invalidates the
+saved feed. *(See "OPDS token onboarding".)*
+
+**Settled, no action:** Saved videos = device-local sideload (USB/file-transfer), no synced shelf.
+
+---
+
 ## 1. Unique, date-stamped issue titles  (priority: now)
 
 The device decides "do I already have this issue?" purely by filename, derived from the OPDS
@@ -70,6 +104,7 @@ One manifest **per issue**, listing every summary in that issue:
   },
   "items": [
     {
+      "channelId": "UCHnyfMqiRRG1u-2MsSQLbXA",
       "channel": "Veritasium",
       "videoTitle": "The Surprising Physics of ...",
       "videoId": "abc123",
@@ -82,7 +117,12 @@ One manifest **per issue**, listing every summary in that issue:
 ```
 
 Field notes:
-- `channel` — display name; the device groups across issues by this. Keep spelling/casing stable (it's the grouping key). A stable `channelId` alongside the display name would be even better if cheap.
+- `channelId` — the YouTube `UC…` id; **the stable grouping key** the device indexes on. (Confirmed available: `summaries.channel_id`.)
+- `channel` — display name only; safe to vary spelling/casing since grouping keys on `channelId`.
+- `videoTitle` — shown in the channels list.
+- `anchor` — **must match** the EPUB TOC target for this summary (see item 2). Spine path and/or `#fragment`.
+- `date` — the video's publish date (or summary date); used for sorting within a channel.
+- `new` — true if this is newly added in this issue vs. the prior one. (Device also infers "new since last sync" itself, so this is a hint, not load-bearing — a cheap "saved within last 24h" heuristic is fine; no extra query needed.)
 - `videoTitle` — shown in the channels list.
 - `anchor` — **must match** the EPUB TOC target for this summary (see item 2). Spine path and/or `#fragment`.
 - `date` — the video's publish date (or summary date); used for sorting within a channel.
@@ -108,14 +148,79 @@ re-issuing the EPUB.
 
 ---
 
-## Open questions for the backend team
+## Resolved with the backend team (2026-06-27)
 
-- Does the current feed already give each issue a unique date-stamped title? (item 1)
-- Can the EPUB generator emit one TOC entry per summary with a stable, video-id-based anchor? (item 2)
-- Preferred manifest delivery — embed in EPUB (A), sidecar URL (B), or OPDS link rel (C)?
-- Is there a stable `channelId` we can use as the grouping key, or only the display name?
-- "Saved videos" vs "daily digest": are user-saved videos delivered in the same daily EPUB, or
-  as separate acquisition entries? (Affects the device's Today / Digests / Saved sectioning.)
+1. **Unique date-stamped titles — already done.** The feed already emits one unique entry per
+   day (`…/2026-06-27.epub`, matching `dc:title`). **Action:** switch the title wording to ISO
+   `Headwater Daily — 2026-06-27`, *and* set the OPDS `<author>` so the device's
+   `author + " - " + title` filename derivation produces a clean, un-doubled name. (Today
+   `author="Headwater"` + `title="Headwater — June 27, 2026"` yields
+   `Headwater - Headwater — June 27, 2026.epub`.) Pick author/title together so the stem is just
+   the ISO issue name — e.g. omit the author, or move the brand into the author and keep the
+   title date-only. Feed `<title>` and EPUB `dc:title` must move together.
+
+2. **Per-summary TOC — TOC done, anchors need the fix.** The generator already emits one XHTML +
+   OPF spine item + NCX navPoint per summary. The only change: anchors are currently index-based
+   (`ch001.xhtml`), so a video can move between rebuilds. Switch to video-id-derived
+   `summary-<videoId>.xhtml` with OPF id `v-<videoId>` (prefixed — XML ids can't start with a
+   digit). Then manifest `anchor` == spine filename. No reader-engine change.
+
+3. **Manifest delivery = Option A (embed in EPUB).** `OEBPS/headwater-manifest.json`, one
+   `zip.file()` call. All fields available from existing summary rows.
+
+4. **Stable `channelId` — yes.** `summaries.channel_id` (the YouTube `UC…` id) exists alongside
+   `channel_name`. Manifest carries both: `channelId` as the grouping key, `channel` as display.
+   *(Device note: the index groups on `channelId`; `channel` is display-only.)*
+
+5. **Saved videos — DEVICE-LOCAL SIDELOAD, no synced shelf. (decided)** The feed delivers
+   **daily digests only**. User-saved videos are a manual "select → export EPUB" the user
+   sideloads (USB / file transfer) — not a synced acquisition entry. This matches the locked
+   "custom-export EPUBs are user-driven" decision; the persistent synced "Saved" shelf was
+   explicitly rejected (too costly for a 380 KB device).
+   **Device consequence:** there is **no separate synced "Saved" section.** The Headwater app's
+   issue list shows whatever is in `/Headwater` — synced digests *and* any sideloaded export.
+   The channels view is built **only from manifests**, so a sideloaded export with no embedded
+   manifest simply appears in the flat issue list and is absent from the channel index (fine).
+   The "Today / Digests / Saved" sectioning collapses to one issues list for now.
+
+---
+
+## OPDS token onboarding — resolved (2026-06-27)
+
+**Backend action: build an AccountPage section for token + feed URL.**
+
+The device already has a full OPDS server management UI at its own web page (device web server
+`/api/opds` GET/POST/DELETE + editable "Add OPDS server" section). That means the user-facing
+onboarding flow is **copy + paste, no typing on the reader**:
+
+1. AccountPage: user generates token → sees full feed URL → **Copy** button.
+2. User opens the **device's File Transfer web page** (browser on the same Wi-Fi) → pastes
+   the URL into "Add OPDS server."
+3. Done. The device auto-detects it as Headwater and "Check Headwater" lights up.
+
+**What AccountPage must own:**
+- Generate / view / **regenerate (revoke)** the OPDS token.
+- The full feed URL + copy button.
+- Instructions: "Copy the URL above, then open your reader's web page and paste it into Add OPDS Server."
+
+**Three device constraints to honor:**
+
+1. **Keep the feed URL on `headwaterapp.com`** (or a subdomain). The device auto-identifies the
+   Headwater feed by substring-matching `headwaterapp.com` in the stored URL
+   (`getHeadwaterServer()`). A subdomain like `api.headwaterapp.com` still matches; a different
+   apex domain would not auto-detect and the sync entry would not appear.
+
+2. **No camera on the device — it cannot scan a QR.** Do not design a "scan this QR with your
+   reader" step. (A QR on AccountPage can help a phone scan it, but that doesn't get the URL
+   onto the reader.) Copy-to-clipboard + paste into device web UI is the correct path. (The
+   device can *display* a QR, relevant only for a future pairing flow — it cannot read one.)
+
+3. **Token regeneration changes the URL → the device's saved server goes stale.** Sync fails
+   gracefully (no crash), but the user must re-paste the new URL. Warn on the regenerate button.
+
+**Future (v2, non-blocking):** true zero-typing pairing = device displays a short code → user
+enters it on the web → backend binds feed to device. The token model built now stays valid
+underneath; no re-architecture needed.
 
 ---
 

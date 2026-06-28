@@ -20,6 +20,7 @@ class HeadwaterAppActivity final : public Activity {
   bool lockNextConfirmRelease = false;
 
   void loadIssues();
+  void onSelectSync();
   void onSelectIssue(const std::string& fileName);
 
  public:

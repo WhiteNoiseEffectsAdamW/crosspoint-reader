@@ -32,12 +32,10 @@ class HomeActivity final : public Activity {
   const HomeMenuItem initialMenuItem;
 
   // Convert HomeMenuItem to menu index (used in onEnter).
-  // When a Headwater feed is present, the two Headwater entries (sync, then app)
-  // lead the menu so the sync entry can be pre-selected at boot.
+  // When a Headwater feed is present, the Headwater app entry leads the menu
+  // so it can be pre-selected at boot.
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl, bool hasHeadwater) {
     int i = 0;
-    if (item == HomeMenuItem::HEADWATER_SYNC) return hasHeadwater ? i : 0;
-    if (hasHeadwater) ++i;
     if (item == HomeMenuItem::HEADWATER_APP) return hasHeadwater ? i : 0;
     if (hasHeadwater) ++i;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
@@ -55,7 +53,6 @@ class HomeActivity final : public Activity {
   // Convert menu index to HomeMenuItem (used in loop)
   static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl, bool hasHeadwater) {
     int i = 0;
-    if (hasHeadwater && idx == i++) return HomeMenuItem::HEADWATER_SYNC;
     if (hasHeadwater && idx == i++) return HomeMenuItem::HEADWATER_APP;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
     if (idx == i++) return HomeMenuItem::RECENTS;
@@ -70,7 +67,6 @@ class HomeActivity final : public Activity {
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
-  void onHeadwaterSyncOpen();
   void onHeadwaterAppOpen();
 
   int getMenuItemCount() const;

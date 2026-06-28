@@ -9,8 +9,9 @@ updates can be re-merged when wanted.
 
 ## What it adds
 
-A **"Check Headwater"** entry on the Home screen — shown only when a Headwater feed is configured, and **pre-selected at
-boot** so a new issue is one button-press away. Selecting it runs a headless `OpdsSyncActivity` that:
+A **"Headwater"** entry on the Home screen — shown only when a Headwater feed is configured, and **pre-selected at
+boot**. Selecting it opens `HeadwaterAppActivity`, which shows a "Check Headwater" item at the top of the list followed
+by downloaded issues. Selecting "Check Headwater" runs a headless `OpdsSyncActivity` that:
 
 1. connects Wi-Fi from saved credentials (`WIFI_STORE`),
 2. fetches the Headwater OPDS feed and downloads any issue not already on the SD card,
@@ -21,9 +22,9 @@ It is **skippable** (Back button, including mid-download) and bounded by a conne
 
 ### Phasing
 
-- **v1 (shipped, both X3 and X4): one-press, user-triggered sync.** Launched only from the Home entry — never from
-  `setup()`. Because nothing runs during boot, a crash or hang just reboots to Home with no automatic retry, so there is
-  no boot-loop to guard against.
+- **v1 (shipped, both X3 and X4): two-press, user-triggered sync.** Boot pre-selects the "Headwater" Home entry;
+  one press opens the app with "Check Headwater" pre-selected; a second press launches sync. Never runs from `setup()`,
+  so a crash just reboots to Home with no automatic retry.
 - **v2 (deferred, X3 only): fully-automatic on-wake sync.** A gate in `setup()` using the X3's battery-backed DS3231 RTC
   (epoch-delta cadence, `configTzTime()` SNTP, attempt-counter quarantine). Not yet implemented.
 
@@ -52,8 +53,12 @@ It is **skippable** (Back button, including mid-download) and bounded by a conne
 - [src/activities/headwater/HeadwaterPaths.h](src/activities/headwater/HeadwaterPaths.h) — single source of truth for
   the `/Headwater` issues folder, shared by the sync (writer) and the app (reader).
 - [src/activities/headwater/HeadwaterAppActivity.h](src/activities/headwater/HeadwaterAppActivity.h) /
-  [.cpp](src/activities/headwater/HeadwaterAppActivity.cpp) — the Headwater app shell: an offline, newest-first list of
-  downloaded issues that opens the selected issue in the reader. The frame the channels view layers onto.
+  [.cpp](src/activities/headwater/HeadwaterAppActivity.cpp) — the Headwater app shell: an offline list with a
+  "Check Headwater" sync item on top and the downloaded issues (newest-first) below, opening the selected issue in the
+  reader. The frame the channels view layers onto.
+- [src/components/icons/headwater.h](src/components/icons/headwater.h) — the 32×32 three-wave Headwater menu icon.
+- [src/images/HeadwaterEdition.h](src/images/HeadwaterEdition.h) — the "Headwater Edition" boot wordmark, a 1-bit raster
+  of EB Garamond Regular (wght 400, 0.01em tracking) baked at 24px (192×18). Per the Headwater design team spec.
 
 **Modified**
 - [src/OpdsServerStore.h](src/OpdsServerStore.h) / [.cpp](src/OpdsServerStore.cpp) — `getHeadwaterServer()` (URL
@@ -62,9 +67,14 @@ It is **skippable** (Back button, including mid-download) and bounded by a conne
   `downloadToFileAtomic()` (`.part` → rename).
 - [src/activities/home/HomeActivity.h](src/activities/home/HomeActivity.h) /
   [.cpp](src/activities/home/HomeActivity.cpp) and [src/activities/ActivityManager.h](src/activities/ActivityManager.h) —
-  `HomeMenuItem::HEADWATER_SYNC` and `HEADWATER_APP`: two Headwater menu entries (sync pre-selected at boot, app below),
-  dispatch.
+  `HomeMenuItem::HEADWATER_APP`: single Headwater home entry (pre-selected at boot), dispatch.
 - [lib/I18n/translations/english.yaml](lib/I18n/translations/english.yaml) — `STR_HEADWATER_*` strings.
+- [src/components/themes/BaseTheme.h](src/components/themes/BaseTheme.h) (`UIIcon::Headwater`) and
+  [src/components/themes/lyra/LyraTheme.cpp](src/components/themes/lyra/LyraTheme.cpp) (`iconForName` 32px case) —
+  register the wave icon. (Lyra is the only theme that draws menu icons; the others ignore `rowIcon`.)
+- [src/activities/boot_sleep/BootActivity.cpp](src/activities/boot_sleep/BootActivity.cpp) — draws the "Headwater Edition"
+  wordmark as a secondary attribution line under the CrossPoint mark. (`drawImage` is an opaque byte-copy, so x is
+  byte-aligned to a multiple of 8.)
 
 ## Build
 
@@ -84,8 +94,8 @@ The sync auto-detects it by the `headwaterapp.com` host.
 
 A dedicated Headwater browsing experience layered on the v1 sync. Design (locked in dialogue):
 
-- **App shell — SHIPPED.** A second Home entry "Headwater" (below "Check Headwater") opens `HeadwaterAppActivity`: a
-  flat, newest-first list of the issues in `/Headwater`, opening the selected issue in the existing reader. This is the
+- **App shell — SHIPPED.** A single "Headwater" Home entry (pre-selected at boot) opens `HeadwaterAppActivity`: a
+  flat list with "Check Headwater" at the top (launches sync) followed by downloaded issues newest-first. This is the
   frame the manifest-driven views below layer onto. Everything below this point is still **gated on the backend
   manifest** — see [HEADWATER_BACKEND.md](HEADWATER_BACKEND.md).
 - **Stored unit = the daily digest EPUB** (plus user "custom export" EPUBs). Each summary is authored once and

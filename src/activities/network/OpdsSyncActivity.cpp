@@ -26,6 +26,10 @@ constexpr unsigned long CONNECT_TIMEOUT_MS = 20000;
 constexpr unsigned long SYNC_BUDGET_MS = 120000;
 // Guard against a malformed feed advertising an unbounded pagination chain.
 constexpr int MAX_FEED_PAGES = 20;
+// How long the completion message ("You're up to date") stays visible before the
+// silent restart, so a nothing-new sync gives feedback instead of a blink-and-gone
+// bounce to Home. A button press skips the wait.
+constexpr unsigned long DONE_HOLD_MS = 1800;
 }  // namespace
 
 void OpdsSyncActivity::onEnter() {
@@ -61,7 +65,7 @@ void OpdsSyncActivity::onExit() {
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(true);
     delay(30);
-    silentRestart();
+    silentRestartToHeadwater();  // land back in the Headwater app, not Home
   }
 }
 
@@ -143,8 +147,8 @@ void OpdsSyncActivity::fetchAndQueue() {
   if (pending.empty()) {
     state = State::DONE;
     statusMessage = tr(STR_HEADWATER_UP_TO_DATE);
+    doneAtMs = millis();  // hold the message briefly (loop()'s DONE case restarts)
     requestUpdate();
-    finishToHome();
   } else {
     state = State::DOWNLOADING;
     requestUpdate();
@@ -172,7 +176,7 @@ void OpdsSyncActivity::downloadNext() {
       &cancelRequested, server.username, server.password);
 
   if (result == HttpDownloader::ABORTED) {
-    finishToHome();
+    finishToApp();
     return;
   }
   if (result == HttpDownloader::OK) {
@@ -185,9 +189,12 @@ void OpdsSyncActivity::downloadNext() {
   currentIssue++;
 }
 
-void OpdsSyncActivity::finishToHome() {
-  // onExit() performs the Wi-Fi teardown + silentRestart (reboots to Home).
-  onGoHome();
+void OpdsSyncActivity::finishToApp() {
+  // Return to the Headwater app where the sync was launched. If Wi-Fi was
+  // brought up, onExit() reboots via silentRestartToHeadwater() (to clear heap
+  // fragmentation) and that lands on the app; if Wi-Fi never came up (e.g. no
+  // saved credentials), no reboot is needed and this navigates there directly.
+  activityManager.goToHeadwaterApp();
 }
 
 bool OpdsSyncActivity::checkSkip() {
@@ -208,7 +215,7 @@ void OpdsSyncActivity::loop() {
   switch (state) {
     case State::CONNECTING: {
       if (checkSkip()) {
-        finishToHome();
+        finishToApp();
         return;
       }
       const wl_status_t status = WiFi.status();
@@ -225,19 +232,21 @@ void OpdsSyncActivity::loop() {
     }
     case State::FETCHING:
       if (checkSkip()) {
-        finishToHome();
+        finishToApp();
         return;
       }
       fetchAndQueue();  // blocking; small feed
       break;
     case State::DOWNLOADING:
       if (checkSkip()) {
-        finishToHome();
+        finishToApp();
         return;
       }
       if (currentIssue >= pending.size()) {
         state = State::DONE;
-        finishToHome();
+        statusMessage = tr(STR_HEADWATER_UP_TO_DATE);
+        doneAtMs = millis();
+        requestUpdate();
       } else {
         downloadNext();  // blocking; one issue per iteration
       }
@@ -246,10 +255,16 @@ void OpdsSyncActivity::loop() {
       // Surface the error, then leave on any button.
       if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
           mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-        finishToHome();
+        finishToApp();
       }
       break;
     case State::DONE:
+      // Hold the completion message briefly so the user sees it, but let an
+      // impatient button press leave early.
+      if (millis() - doneAtMs > DONE_HOLD_MS || mappedInput.wasReleased(MappedInputManager::Button::Back) ||
+          mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+        finishToApp();
+      }
       break;
   }
 }

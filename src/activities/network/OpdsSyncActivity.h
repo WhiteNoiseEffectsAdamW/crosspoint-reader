@@ -49,6 +49,7 @@ class OpdsSyncActivity final : public Activity {
 
   unsigned long connectStartMs = 0;
   unsigned long syncStartMs = 0;
+  unsigned long doneAtMs = 0;  // when the DONE state was entered; gates the completion hold
   bool cancelRequested = false;
 
   std::string statusMessage;
@@ -59,7 +60,7 @@ class OpdsSyncActivity final : public Activity {
   void startConnect();
   void fetchAndQueue();
   void downloadNext();
-  void finishToHome();
+  void finishToApp();
   bool checkSkip();
 
   bool preventAutoSleep() override { return true; }

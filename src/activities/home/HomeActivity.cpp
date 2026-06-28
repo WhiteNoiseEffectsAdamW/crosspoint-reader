@@ -18,7 +18,6 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "activities/headwater/HeadwaterAppActivity.h"
-#include "activities/network/OpdsSyncActivity.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -32,7 +31,7 @@ int HomeActivity::getMenuItemCount() const {
     count++;
   }
   if (hasHeadwater) {
-    count += 2;  // "Check Headwater" (sync) + "Headwater" (app)
+    count += 1;  // "Headwater" app entry (sync lives inside the app)
   }
   return count;
 }
@@ -127,8 +126,8 @@ void HomeActivity::onEnter() {
   if (initialMenuItem != HomeMenuItem::NONE) {
     selectorIndex = base + menuItemToIndex(initialMenuItem, hasOpdsServers, hasHeadwater);
   } else if (hasHeadwater) {
-    // Pre-select the Headwater entry at boot so a new issue is one press away.
-    selectorIndex = base + menuItemToIndex(HomeMenuItem::HEADWATER_SYNC, hasOpdsServers, hasHeadwater);
+    // Pre-select the Headwater entry at boot so it's one press to open the app.
+    selectorIndex = base + menuItemToIndex(HomeMenuItem::HEADWATER_APP, hasOpdsServers, hasHeadwater);
   } else {
     selectorIndex = 0;
   }
@@ -199,9 +198,6 @@ void HomeActivity::loop() {
     } else {
       const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
       switch (indexToMenuItem(menuIndex, hasOpdsServers, hasHeadwater)) {
-        case HomeMenuItem::HEADWATER_SYNC:
-          onHeadwaterSyncOpen();
-          break;
         case HomeMenuItem::HEADWATER_APP:
           onHeadwaterAppOpen();
           break;
@@ -261,12 +257,8 @@ void HomeActivity::render(RenderLock&&) {
   }
 
   if (hasHeadwater) {
-    // Order matches indexToMenuItem: sync first (pre-selected boot target), then
-    // the app. Insert the app at the front first, then the sync ahead of it.
     menuItems.insert(menuItems.begin(), tr(STR_HEADWATER));
-    menuIcons.insert(menuIcons.begin(), Book);
-    menuItems.insert(menuItems.begin(), tr(STR_HEADWATER_CHECK));
-    menuIcons.insert(menuIcons.begin(), Library);
+    menuIcons.insert(menuIcons.begin(), Headwater);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -310,13 +302,6 @@ void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }
-
-void HomeActivity::onHeadwaterSyncOpen() {
-  const OpdsServer* server = OPDS_STORE.getHeadwaterServer();
-  if (server) {
-    activityManager.replaceActivity(std::make_unique<OpdsSyncActivity>(renderer, mappedInput, *server));
-  }
-}
 
 void HomeActivity::onHeadwaterAppOpen() {
   activityManager.replaceActivity(std::make_unique<HeadwaterAppActivity>(renderer, mappedInput));
