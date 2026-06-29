@@ -100,6 +100,7 @@ class ActivityManager {
   void goToCrashReport();
   void goToHeadwaterApp();
   void goToHeadwaterChannels();
+  void goToHeadwaterArchive();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);
 
   // This will move current activity to stack instead of deleting it

@@ -10,6 +10,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "headwater/HeadwaterAppActivity.h"
+#include "headwater/HeadwaterArchiveActivity.h"
 #include "headwater/HeadwaterChannelsActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -235,6 +236,10 @@ void ActivityManager::goToHeadwaterApp() {
 
 void ActivityManager::goToHeadwaterChannels() {
   pushActivity(std::make_unique<HeadwaterChannelsActivity>(renderer, mappedInput));
+}
+
+void ActivityManager::goToHeadwaterArchive() {
+  pushActivity(std::make_unique<HeadwaterArchiveActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {

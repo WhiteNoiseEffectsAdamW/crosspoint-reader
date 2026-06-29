@@ -20,49 +20,51 @@
 namespace {
 constexpr size_t NAME_BUFFER_SIZE = 256;
 
-// Strip the ".epub" (or other) extension for display. Until the backend
-// manifest ships clean titles, the filename stem is the best label we have.
 std::string displayName(const std::string& fileName) {
   const auto pos = fileName.rfind('.');
   return pos == std::string::npos ? fileName : fileName.substr(0, pos);
 }
 }  // namespace
 
+// Row layout (all rows pre-computed):
+//   0 issues:  [Sync now]                                     totalItems=1
+//   1 issue:   [Today] [Sync now] [Channels]                  totalItems=3
+//   2+ issues: [Today] [Sync now] [Channels] [Archived]       totalItems=4
+//
+// "Today" = issues[0] (newest by ISO-date sort). Everything else lives in
+// HeadwaterArchiveActivity, which the user reaches via "Archived".
+
+namespace {
+// Row indices when at least one issue exists.
+constexpr int ROW_TODAY    = 0;
+constexpr int ROW_SYNC     = 1;
+constexpr int ROW_CHANNELS = 2;
+constexpr int ROW_ARCHIVED = 3;
+}  // namespace
+
 void HeadwaterAppActivity::loadIssues() {
   issues.clear();
-
-  // RAII: the directory handle closes when it leaves scope (HalFile destructor).
   auto dir = Storage.open(headwater::ISSUES_DIR);
-  if (!dir || !dir.isDirectory()) {
-    return;  // No sync has run yet; the sync item still shows.
-  }
+  if (!dir || !dir.isDirectory()) return;
 
   char nameBuf[NAME_BUFFER_SIZE];
   dir.rewindDirectory();
-  // Advance with dir.openNextFile() (the directory's iterator), not
-  // file.openNextFile() — the latter would only ever yield the first entry.
   for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
     if (file.isDirectory()) continue;
     file.getName(nameBuf, NAME_BUFFER_SIZE);
     const std::string_view name{nameBuf};
-    if (FsHelpers::hasEpubExtension(name)) {
-      issues.emplace_back(name);
-    }
+    if (FsHelpers::hasEpubExtension(name)) issues.emplace_back(name);
   }
-
-  // Issue titles are date-stamped, so descending lexicographic order puts the
-  // newest issue first.
   std::sort(issues.begin(), issues.end(), std::greater<std::string>());
 }
 
 void HeadwaterAppActivity::onEnter() {
   Activity::onEnter();
-
-  selectorIndex = 0;  // pre-select the sync item
+  // Pre-select today's issue when one exists; otherwise Sync now.
+  selectorIndex = 0;
   // Launched from the Home menu with Confirm held: swallow that release so we
-  // don't immediately trigger sync.
+  // don't immediately open today's issue.
   lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
-
   loadIssues();
   requestUpdate();
 }
@@ -81,28 +83,33 @@ void HeadwaterAppActivity::onSelectSync() {
 
 void HeadwaterAppActivity::onSelectChannels() { activityManager.goToHeadwaterChannels(); }
 
+void HeadwaterAppActivity::onSelectArchive() { activityManager.goToHeadwaterArchive(); }
+
 void HeadwaterAppActivity::onSelectIssue(const std::string& fileName) {
   activityManager.goToReader(std::string(headwater::ISSUES_DIR) + "/" + fileName);
 }
 
 void HeadwaterAppActivity::loop() {
-  // Index 0 = Sync now; index 1 = Channels (when issues present); index 2..N = issues.
-  const bool showChannels = hasChannels();
-  const int totalItems = static_cast<int>(issues.size()) + (showChannels ? 2 : 1);
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
+  const bool hasIssues  = !issues.empty();
+  const bool hasArchive = issues.size() > 1;
+  const int totalItems  = hasIssues ? (hasArchive ? 4 : 3) : 1;
+  const int pageItems   = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (lockNextConfirmRelease) {
       lockNextConfirmRelease = false;
       return;
     }
-    if (selectorIndex == 0) {
+    if (!hasIssues) {
       onSelectSync();
-    } else if (showChannels && selectorIndex == 1) {
-      onSelectChannels();
     } else {
-      const size_t issueIdx = showChannels ? selectorIndex - 2 : selectorIndex - 1;
-      onSelectIssue(issues[issueIdx]);
+      switch (static_cast<int>(selectorIndex)) {
+        case ROW_TODAY:    onSelectIssue(issues[0]); break;
+        case ROW_SYNC:     onSelectSync();            break;
+        case ROW_CHANNELS: onSelectChannels();        break;
+        case ROW_ARCHIVED: onSelectArchive();         break;
+        default:                                      break;
+      }
     }
     return;
   }
@@ -132,32 +139,34 @@ void HeadwaterAppActivity::loop() {
 
 void HeadwaterAppActivity::render(RenderLock&&) {
   renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageWidth  = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const auto& metrics = UITheme::getInstance().getMetrics();
+  const auto& metrics   = UITheme::getInstance().getMetrics();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_HEADWATER));
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop    = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
 
-  // Index 0 = Sync now; index 1 = Channels (when issues present); index 2..N = issues.
-  const bool showChannels = hasChannels();
-  const int totalItems = static_cast<int>(issues.size()) + (showChannels ? 2 : 1);
-  GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectorIndex,
-               [this, showChannels](int index) -> std::string {
-                 if (index == 0) return tr(STR_HEADWATER_SYNC_NOW);
-                 if (showChannels && index == 1) return tr(STR_HEADWATER_CHANNELS);
-                 return displayName(issues[showChannels ? index - 2 : index - 1]);
+  const bool hasIssues  = !issues.empty();
+  const bool hasArchive = issues.size() > 1;
+  const int totalItems  = hasIssues ? (hasArchive ? 4 : 3) : 1;
+
+  GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems,
+               static_cast<int>(selectorIndex), [this, hasIssues, hasArchive](int i) -> std::string {
+                 if (!hasIssues) return tr(STR_HEADWATER_SYNC_NOW);
+                 switch (i) {
+                   case ROW_TODAY:    return displayName(issues[0]);
+                   case ROW_SYNC:     return tr(STR_HEADWATER_SYNC_NOW);
+                   case ROW_CHANNELS: return tr(STR_HEADWATER_CHANNELS);
+                   case ROW_ARCHIVED: return tr(STR_HEADWATER_ARCHIVE);
+                   default:           return {};
+                 }
                });
 
-  // Confirm hint mirrors the Home screen ("Select") regardless of row; the row
-  // itself (Sync now vs. an issue) tells the user what Select will do.
-  const bool hasIssues = !issues.empty();
-  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_SELECT), hasIssues ? tr(STR_DIR_UP) : "",
-                                            hasIssues ? tr(STR_DIR_DOWN) : "");
+  const auto labels = mappedInput.mapLabels(tr(STR_HOME), tr(STR_SELECT),
+                                            totalItems > 1 ? tr(STR_DIR_UP) : "",
+                                            totalItems > 1 ? tr(STR_DIR_DOWN) : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
   renderer.displayBuffer();
 }
