@@ -1,21 +1,41 @@
 # Headwater Backend — Handoff & Requirements
 
 This is the **handoff list for the Headwater backend team**. The device-side Headwater
-edition (v1 sync) is shipped and working; the **v-next Headwater App** (cross-day channel
-browsing on the reader) is **gated on the backend changes below**. None of these are
-shipped yet — this doc is the contract.
+edition (v1 sync) is shipped and working, and the **Headwater App** (cross-day channel
+browsing on the reader) is now **live on-device** — the per-summary anchors and per-issue
+manifest it depends on have shipped from the backend and are verified end-to-end on X4
+hardware. What remains is one backend feature (a rolling feed window) plus a deploy
+confirmation; both are tracked below.
 
 See [HEADWATER.md](HEADWATER.md) for the device-side design.
 
 ---
 
-## TL;DR — what the backend must deliver
+## Status (2026-06-29)
 
-1. **Unique, date-stamped issue titles** in the OPDS feed (idempotency). *(Blocks v1 robustness — do first.)*
-2. **One TOC/chapter entry per video summary** inside each daily-digest EPUB, each with a stable anchor. *(Enables deep-linking.)*
-3. **A per-issue manifest** describing each summary: `{channel, videoTitle, anchor, date, new}`. *(Enables the channels view.)*
+| Item | State |
+|------|-------|
+| **P1a** — per-summary anchors (`summary-<videoId>.xhtml`) | ✅ **Shipped.** Deep-link verified on-device. |
+| **P1b** — embedded manifest (`OEBPS/headwater-manifest.json`) | ✅ **Shipped.** Channels view live + verified on X4. |
+| **P0** — clean ISO title, no `dc:creator` | ✅ **Fixed in code** (commits `afd161d`, `28c9a10`) — **pending prod deploy + device re-sync.** The doubled `Headwater - Headwater — …` name we saw is pre-fix cached output. Backend emits `Headwater Daily 2026-06-29` (space, not em-dash — device-accepted, no parity change needed). |
+| **Rolling feed window** | ⏳ **Only remaining backend build.** Feed currently advertises **today's issue only**, so channel backlog is 1 day deep. Design exists (`docs/epub-sync-design.md`): last N completed, digest-aligned days, immutable per past day. Device already follows OPDS pagination and groups across issues → **zero device work to consume it.** |
+| **P2** — AccountPage token + copy-URL onboarding | Open (see below). |
 
-Items 2 + 3 together unblock the cross-day Headwater App. Item 1 is independent and should land first.
+Manifest `issue.title` is the clean display source of truth (independent of `dc:title`);
+`issue.id` / `issue.date` are bare ISO. The device reads its issue-list label from the
+(now-clean) filename, so no manifest-title read is needed there.
+
+No device-side retention/pruning is built or planned at current feed scale — and any future
+pruning must be **manifest-aware**, since `/Headwater` also holds sideloaded user exports
+(no manifest) that must never be deleted.
+
+---
+
+## TL;DR — original contract (for history)
+
+1. **Unique, date-stamped issue titles** in the OPDS feed (idempotency). — *P0, fixed in code, see Status.*
+2. **One TOC/chapter entry per video summary** with a stable anchor. — *P1a, shipped.*
+3. **A per-issue manifest** describing each summary: `{channel, videoTitle, anchor, date, new}`. — *P1b, shipped.*
 
 ---
 
